@@ -32,6 +32,7 @@ type Customer struct {
 	FirstName   string             `json:"firstName,omitempty" bson:"firstName,omitempty"`
 	LastName    string             `json:"lastName,omitempty" bson:"lastName,omitempty"`
 	PhoneNumber string             `json:"phoneNumber,omitempty" bson:"phoneNumber,omitempty"`
+	Score       float64            `json:"score" bson:"score"`
 }
 
 type VerificationRequest struct {
@@ -105,23 +106,41 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	fmt.Println("req.Score", req.Score)
 
 	if CustomerID, exists := codeStore.Load(req.Code); exists {
-		if CustomerID == nil {
+		fmt.Println("CustomerID", CustomerID)
+
+		if CustomerID == nil || CustomerID.(string) == "" {
 			http.Error(response, "Invalid customer ID", http.StatusBadRequest)
 			return
 		}
 
-		codeStore.Delete(req.Code)
+		// TODO open this
+		// codeStore.Delete(req.Code)
+
+		collection := client.Database(dbName).Collection("customer")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		id, _ := primitive.ObjectIDFromHex(CustomerID.(string))
+		fmt.Println("id", id)
+		var customer Customer
+		collection.FindOne(ctx, bson.M{"_id": id}).Decode(&customer)
+		fmt.Println("customer", customer)
+		newScore := customer.Score + req.Score
+		fmt.Println("newScore", newScore)
+		collection.UpdateOne(
+			context.Background(),
+			bson.M{"_id": id},
+			bson.M{"$set": bson.M{"score": newScore}},
+		)
+
 		historyCollection := client.Database(dbName).Collection("history")
 		historyRecord := HistoryRecord{
 			CustomerID: CustomerID.(string),
 			Score:      req.Score,
 			Timestamp:  time.Now().Unix(),
 		}
-		_, err := historyCollection.InsertOne(context.Background(), historyRecord)
-		if err != nil {
-			http.Error(response, "Failed to save history", http.StatusInternalServerError)
-			return
-		}
+		historyCollection.InsertOne(context.Background(), historyRecord)
+
 		response.WriteHeader(http.StatusOK)
 		response.Write([]byte("Code verified and history saved"))
 	} else {
