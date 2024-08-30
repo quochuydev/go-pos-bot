@@ -196,6 +196,7 @@ func GetPointsCodeHandler(c tele.Context) error {
 		File: imageFile,
 	}
 
+	fmt.Println("get_points_code", user.FirstName)
 	return c.Send(photo)
 }
 
@@ -224,6 +225,7 @@ func RedeemPointsHandler(c tele.Context) error {
 	}
 
 	m := "Hello " + customer.FirstName + " you have: " + score + " points.\n\nExchange points to get free drink:"
+	fmt.Println("redeem_points", customer.FirstName, score)
 	return c.Send(m, replyMarkup)
 }
 
@@ -252,6 +254,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	}
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
+	fmt.Println("exchange_drink", customer.FirstName)
 	return c.Send("Exchange free drink for " + customer.FirstName)
 }
 
@@ -280,6 +283,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	}
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
+	fmt.Println("exchange_food", customer.FirstName)
 	return c.Send("Exchange free food for " + customer.FirstName)
 }
 
