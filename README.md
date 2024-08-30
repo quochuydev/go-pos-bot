@@ -4,13 +4,25 @@
 
 #### Test BOT
 
-<img src="bot.jpg" alt="t.me/Goposv1Bot" width="200"/>
+<img src="docs/bot.jpg" alt="t.me/Goposv1Bot" width="200"/>
 
 ### Setup free MongoDB Atlas
 
+#### - Register a free mongo cluster
+
+https://cloud.mongodb.com
+
+#### - Create a new cluster
+
+<img src="docs/mongodb.png" alt="MongoDB Atlas" width="700"/>
+
+#### - Create a new cluster
+
+<img src="docs/mongodb-network-access.png" alt="MongoDB Atlas Network Access" width="700"/>
+
 ### Deploy Golang in AWS EC2
 
-build for aws linux
+OS: AWS Linux
 
 ```
 uname -s

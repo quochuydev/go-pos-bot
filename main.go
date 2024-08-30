@@ -116,7 +116,7 @@ func TextHandler(c telebot.Context) error {
 	u := c.Sender()
 	t := c.Text()
 	fmt.Println("Received message:", u.FirstName, t)
-	return c.Send("There are commands I support:\n/get_points_code - Get points code\n/redeem_points - Redeem points")
+	return c.Send("There are commands I support:\nGet points code: /get_points_code\nRedeem points: /redeem_points")
 }
 
 func generateRandomCode() string {
