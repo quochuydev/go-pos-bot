@@ -54,6 +54,10 @@ type HistoryRecord struct {
 
 var dbName string = "pos"
 
+func generateRandomCode() string {
+	return strconv.Itoa(100000 + rand.Intn(900000))
+}
+
 func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	var customers []Customer
@@ -71,21 +75,6 @@ func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 		customers = append(customers, customer)
 	}
 	json.NewEncoder(response).Encode(customers)
-}
-
-func CreateCustomerEndpoint(response http.ResponseWriter, request *http.Request) {
-	response.Header().Set("Content-Type", "application/json")
-	var customer Customer
-	_ = json.NewDecoder(request.Body).Decode(&customer)
-	collection := client.Database(dbName).Collection("customer")
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	result, _ := collection.InsertOne(ctx, customer)
-	json.NewEncoder(response).Encode(result)
-}
-
-func generateRandomCode() string {
-	return strconv.Itoa(100000 + rand.Intn(900000))
 }
 
 func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
@@ -135,6 +124,120 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
+func StartHandlerfunc(c tele.Context) error {
+	user := c.Sender()
+	tid := fmt.Sprint(user.ID)
+
+	customerPayload := Customer{
+		FirstName:      user.FirstName,
+		Username:       user.Username,
+		TelegramUserId: tid,
+		Score:          0,
+	}
+
+	collection := client.Database(dbName).Collection("customer")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
+	fmt.Println("customer", customer)
+
+	collection.InsertOne(ctx, customerPayload)
+	return c.Send("Hello " + user.FirstName)
+}
+
+func GetPointsCodeHandler(c tele.Context) error {
+	user := c.Sender()
+	code := generateRandomCode()
+	codeStore.Store(code, fmt.Sprint(user.ID))
+	c.Send("Points code: " + code)
+
+	qrCode, err := qrcode.New(code, qrcode.Medium)
+	if err != nil {
+		return c.Send("Failed to generate QR code")
+	}
+
+	var qrBuffer bytes.Buffer
+	qrCode.Write(200, &qrBuffer)
+
+	imageFile := telebot.File{
+		FileReader: bytes.NewReader(qrBuffer.Bytes()),
+	}
+
+	photo := &telebot.Photo{
+		File: imageFile,
+	}
+
+	return c.Send(photo)
+}
+
+func RedeemPointsHandler(c tele.Context) error {
+	user := c.Sender()
+	collection := client.Database(dbName).Collection("customer")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+	score := fmt.Sprint(customer.Score)
+
+	exchangeDrinkBtn := telebot.InlineButton{
+		Unique: "exchange_drink",
+		Text:   "Exchange free drink (20 points)",
+	}
+	exchangeFoodBtn := telebot.InlineButton{
+		Unique: "exchange_food",
+		Text:   "Exchange free food (25 points)",
+	}
+	replyMarkup := &telebot.ReplyMarkup{
+		InlineKeyboard: [][]telebot.InlineButton{
+			{exchangeDrinkBtn},
+			{exchangeFoodBtn},
+		},
+	}
+
+	m := "Hello " + customer.FirstName + " you have: " + score + " points.\nExchange points to get free drink:"
+	return c.Send(m, replyMarkup)
+}
+
+func ExchangeDrinkHandler(c telebot.Context) error {
+	updatedMarkup := &telebot.ReplyMarkup{
+		InlineKeyboard: [][]telebot.InlineButton{},
+	}
+	err := c.Edit(c.Message().Text, updatedMarkup)
+	if err != nil {
+		return err
+	}
+
+	user := c.Sender()
+	collection := client.Database(dbName).Collection("customer")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+	return c.Send("Exchange free drink for " + customer.FirstName)
+}
+
+func ExchangeFoodHandler(c telebot.Context) error {
+	updatedMarkup := &telebot.ReplyMarkup{
+		InlineKeyboard: [][]telebot.InlineButton{},
+	}
+	err := c.Edit(c.Message().Text, updatedMarkup)
+	if err != nil {
+		return err
+	}
+
+	user := c.Sender()
+	collection := client.Database(dbName).Collection("customer")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+	return c.Send("Exchange free food for " + customer.FirstName)
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -167,113 +270,11 @@ func main() {
 		return
 	}
 
-	b.Handle("/start", func(c tele.Context) error {
-		user := c.Sender()
-		telegramUserId := fmt.Sprint(user.ID)
-		customer := Customer{
-			FirstName:      user.FirstName,
-			Username:       user.Username,
-			TelegramUserId: telegramUserId,
-			Score:          0,
-		}
-
-		collection := client.Database(dbName).Collection("customer")
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		collection.InsertOne(ctx, customer)
-		return c.Send("Hello " + user.FirstName)
-	})
-
-	b.Handle("/get_points_code", func(c tele.Context) error {
-		user := c.Sender()
-		code := generateRandomCode()
-		codeStore.Store(code, fmt.Sprint(user.ID))
-		c.Send("Mã tích điểm: " + code)
-
-		qrCode, err := qrcode.New(code, qrcode.Medium)
-		if err != nil {
-			return c.Send("Failed to generate QR code")
-		}
-
-		var qrBuffer bytes.Buffer
-		qrCode.Write(200, &qrBuffer)
-
-		imageFile := telebot.File{
-			FileReader: bytes.NewReader(qrBuffer.Bytes()),
-		}
-
-		photo := &telebot.Photo{
-			File: imageFile,
-		}
-
-		return c.Send(photo)
-	})
-
-	b.Handle("/redeem_points", func(c tele.Context) error {
-		user := c.Sender()
-		collection := client.Database(dbName).Collection("customer")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		var customer Customer
-		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
-		score := fmt.Sprint(customer.Score)
-
-		exchangeDrinkBtn := telebot.InlineButton{
-			Unique: "exchange_drink",
-			Text:   "Đổi đồ uống (20 điểm)",
-		}
-		exchangeFoodBtn := telebot.InlineButton{
-			Unique: "exchange_food",
-			Text:   "Đổi thức ăn (25 điểm)",
-		}
-		replyMarkup := &telebot.ReplyMarkup{
-			InlineKeyboard: [][]telebot.InlineButton{
-				{exchangeDrinkBtn},
-				{exchangeFoodBtn},
-			},
-		}
-
-		m := "Hello " + customer.FirstName + " bạn có: " + score + " điểm.\nĐổi điểm để lấy quà tặng:"
-		return c.Send(m, replyMarkup)
-	})
-
-	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, func(c telebot.Context) error {
-		updatedMarkup := &telebot.ReplyMarkup{
-			InlineKeyboard: [][]telebot.InlineButton{},
-		}
-		err := c.Edit(c.Message().Text, updatedMarkup)
-		if err != nil {
-			return err
-		}
-
-		user := c.Sender()
-		collection := client.Database(dbName).Collection("customer")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		var customer Customer
-		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
-
-		return c.Send("Exchange drink for " + customer.FirstName)
-	})
-
-	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, func(c telebot.Context) error {
-		updatedMarkup := &telebot.ReplyMarkup{
-			InlineKeyboard: [][]telebot.InlineButton{},
-		}
-		err := c.Edit(c.Message().Text, updatedMarkup)
-		if err != nil {
-			return err
-		}
-
-		user := c.Sender()
-		collection := client.Database(dbName).Collection("customer")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		var customer Customer
-		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
-
-		return c.Send("Exchange food for " + customer.FirstName)
-	})
+	b.Handle("/start", StartHandlerfunc)
+	b.Handle("/get_points_code", GetPointsCodeHandler)
+	b.Handle("/redeem_points", RedeemPointsHandler)
+	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
+	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, ExchangeFoodHandler)
 
 	go func() {
 		fmt.Println("Starting Telegram bot...")
@@ -281,7 +282,6 @@ func main() {
 	}()
 
 	router := mux.NewRouter()
-	router.HandleFunc("/api/customers", CreateCustomerEndpoint).Methods("POST")
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
 	log.Fatal(http.ListenAndServe(":12345", router))
