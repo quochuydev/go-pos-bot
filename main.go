@@ -28,11 +28,6 @@ var client *mongo.Client
 
 var codeStore sync.Map
 
-type ShortCode struct {
-	Code    string `json:"code"`
-	Expires int64  `json:"expires"`
-}
-
 type Customer struct {
 	ID             primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
 	FirstName      string             `json:"firstName,omitempty" bson:"firstName,omitempty"`
@@ -41,21 +36,25 @@ type Customer struct {
 	Score          float64            `json:"score" bson:"score"`
 }
 
-type VerificationRequest struct {
-	Score float64 `json:"score"`
-	Code  string  `json:"code"`
-}
-
 type History struct {
-	CustomerID string  `bson:"customer_id"`
-	Score      float64 `bson:"score"`
-	Type       string  `bson:"type"`
-	Timestamp  int64   `bson:"timestamp"`
+	CustomerID string  `json:"customer_id" bson:"customer_id"`
+	Score      float64 `json:"score" bson:"score"`
+	Type       string  `json:"type" bson:"type"`
+	Timestamp  int64   `json:"timestamp" bson:"timestamp"`
 }
 
 var dbName string = "pos"
 var customerCollection string = "customer"
 var historyCollection string = "history"
+
+type ShortCode struct {
+	Code string `json:"code"`
+}
+
+type VerificationRequest struct {
+	Score float64 `json:"score"`
+	Code  string  `json:"code"`
+}
 
 func main() {
 	err := godotenv.Load()
@@ -90,6 +89,7 @@ func main() {
 	}
 
 	b.Handle("/start", StartHandler)
+	b.Handle(telebot.OnText, TextHandler)
 	b.Handle("/get_points_code", GetPointsCodeHandler)
 	b.Handle("/redeem_points", RedeemPointsHandler)
 	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
@@ -106,6 +106,13 @@ func main() {
 	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
 	log.Fatal(http.ListenAndServe(":12345", router))
+}
+
+func TextHandler(c telebot.Context) error {
+	u := c.Sender()
+	t := c.Text()
+	fmt.Println("Received message:", u.FirstName, t)
+	return c.Send("There are commands I support:\n/get_points_code - Get points code\n/redeem_points - Redeem points")
 }
 
 func generateRandomCode() string {
