@@ -14,11 +14,11 @@ https://cloud.mongodb.com
 
 #### - Create a new cluster
 
-<img src="docs/mongodb.png" alt="MongoDB Atlas" width="700"/>
+![MongoDB Atlas](docs/mongodb-atlas.png)
 
 #### - Create a new cluster
 
-<img src="docs/mongodb-network-access.png" alt="MongoDB Atlas Network Access" width="700"/>
+![MongoDB Atlas Network Access](docs/mongodb-network-access.png)
 
 ### Deploy Golang in AWS EC2
 
