@@ -99,14 +99,12 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	fmt.Println("req.Score", req.Score)
 
 	if TelegramUserId, exists := codeStore.Load(req.Code); exists {
-		fmt.Println("TelegramUserId", TelegramUserId)
-
 		if TelegramUserId == nil || TelegramUserId.(string) == "" {
 			http.Error(response, "Invalid customer ID", http.StatusBadRequest)
 			return
 		}
 
-		// TODO open this
+		// TODO
 		// codeStore.Delete(req.Code)
 
 		collection := client.Database(dbName).Collection("customer")
@@ -116,7 +114,6 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 		collection.FindOne(ctx, bson.M{"telegramUserId": TelegramUserId}).Decode(&customer)
 		fmt.Println("customer", customer)
 		newScore := customer.Score + req.Score
-		fmt.Println("newScore", newScore)
 		collection.UpdateOne(
 			context.Background(),
 			bson.M{"_id": customer.ID.String()},
@@ -136,10 +133,6 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	} else {
 		http.Error(response, "Invalid code", http.StatusBadRequest)
 	}
-}
-
-func NukeEndpoint(response http.ResponseWriter, request *http.Request) {
-	client.Database(dbName).Drop(context.Background())
 }
 
 func main() {
@@ -224,7 +217,62 @@ func main() {
 		var customer Customer
 		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 		score := fmt.Sprint(customer.Score)
-		return c.Send("Hello " + customer.FirstName + " bạn có: " + score + " điểm")
+
+		exchangeDrinkBtn := telebot.InlineButton{
+			Unique: "exchange_drink",
+			Text:   "Đổi đồ uống (20 điểm)",
+		}
+		exchangeFoodBtn := telebot.InlineButton{
+			Unique: "exchange_food",
+			Text:   "Đổi thức ăn (25 điểm)",
+		}
+		replyMarkup := &telebot.ReplyMarkup{
+			InlineKeyboard: [][]telebot.InlineButton{
+				{exchangeDrinkBtn},
+				{exchangeFoodBtn},
+			},
+		}
+
+		m := "Hello " + customer.FirstName + " bạn có: " + score + " điểm.\nĐổi điểm để lấy quà tặng:"
+		return c.Send(m, replyMarkup)
+	})
+
+	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, func(c telebot.Context) error {
+		updatedMarkup := &telebot.ReplyMarkup{
+			InlineKeyboard: [][]telebot.InlineButton{},
+		}
+		err := c.Edit(c.Message().Text, updatedMarkup)
+		if err != nil {
+			return err
+		}
+
+		user := c.Sender()
+		collection := client.Database(dbName).Collection("customer")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var customer Customer
+		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+		return c.Send("Exchange drink for " + customer.FirstName)
+	})
+
+	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, func(c telebot.Context) error {
+		updatedMarkup := &telebot.ReplyMarkup{
+			InlineKeyboard: [][]telebot.InlineButton{},
+		}
+		err := c.Edit(c.Message().Text, updatedMarkup)
+		if err != nil {
+			return err
+		}
+
+		user := c.Sender()
+		collection := client.Database(dbName).Collection("customer")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var customer Customer
+		collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+		return c.Send("Exchange food for " + customer.FirstName)
 	})
 
 	go func() {
@@ -233,7 +281,6 @@ func main() {
 	}()
 
 	router := mux.NewRouter()
-	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
 	router.HandleFunc("/api/customers", CreateCustomerEndpoint).Methods("POST")
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
