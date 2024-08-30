@@ -56,6 +56,10 @@ type VerificationRequest struct {
 	Code  string  `json:"code"`
 }
 
+func init() {
+	rand.Seed(uint64(time.Now().UnixNano()))
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
