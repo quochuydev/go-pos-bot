@@ -46,7 +46,7 @@ type VerificationRequest struct {
 	Code  string  `json:"code"`
 }
 
-type HistoryRecord struct {
+type History struct {
 	CustomerID string  `bson:"customer_id"`
 	Score      float64 `bson:"score"`
 	Type       string  `bson:"type"`
@@ -54,6 +54,8 @@ type HistoryRecord struct {
 }
 
 var dbName string = "pos"
+var customerCollection string = "customer"
+var historyCollection string = "history"
 
 func generateRandomCode() string {
 	return strconv.Itoa(100000 + rand.Intn(900000))
@@ -62,7 +64,7 @@ func generateRandomCode() string {
 func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	var customers []Customer
-	collection := client.Database(dbName).Collection("customer")
+	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cursor, err := collection.Find(ctx, bson.M{})
@@ -76,6 +78,25 @@ func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 		customers = append(customers, customer)
 	}
 	json.NewEncoder(response).Encode(customers)
+}
+
+func GetHistoriesEndpoint(response http.ResponseWriter, request *http.Request) {
+	response.Header().Set("Content-Type", "application/json")
+	var histories []History
+	collection := client.Database(dbName).Collection(historyCollection)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cursor, err := collection.Find(ctx, bson.M{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer cursor.Close(ctx)
+	for cursor.Next(ctx) {
+		var h History
+		cursor.Decode(&h)
+		histories = append(histories, h)
+	}
+	json.NewEncoder(response).Encode(histories)
 }
 
 func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
@@ -94,16 +115,14 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 			return
 		}
 
-		// TODO
-		// codeStore.Delete(req.Code)
+		codeStore.Delete(req.Code)
 
-		collection := client.Database(dbName).Collection("customer")
+		collection := client.Database(dbName).Collection(customerCollection)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
 		var customer Customer
 		collection.FindOne(ctx, bson.M{"telegramUserId": TelegramUserId.(string)}).Decode(&customer)
-		fmt.Println("customer", customer)
 
 		newScore := customer.Score + req.Score
 		collection.UpdateOne(
@@ -112,8 +131,8 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 			bson.M{"$set": bson.M{"score": newScore}},
 		)
 
-		historyCollection := client.Database(dbName).Collection("history")
-		historyRecord := HistoryRecord{
+		historyCollection := client.Database(dbName).Collection(historyCollection)
+		historyRecord := History{
 			CustomerID: customer.ID.String(),
 			Score:      req.Score,
 			Type:       "buy",
@@ -132,21 +151,26 @@ func StartHandler(c tele.Context) error {
 	user := c.Sender()
 	tid := fmt.Sprint(user.ID)
 
-	collection := client.Database(dbName).Collection("customer")
+	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var customer Customer
-	collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
-	fmt.Println("customer", customer)
+	err := collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
 
-	customerPayload := Customer{
-		FirstName:      user.FirstName,
-		Username:       user.Username,
-		TelegramUserId: tid,
-		Score:          0,
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			customerPayload := Customer{
+				FirstName:      user.FirstName,
+				Username:       user.Username,
+				TelegramUserId: tid,
+				Score:          0,
+			}
+			collection.InsertOne(ctx, customerPayload)
+		} else {
+			log.Fatal(err)
+		}
 	}
-	collection.InsertOne(ctx, customerPayload)
 
 	return c.Send("Hello " + user.FirstName)
 }
@@ -176,7 +200,7 @@ func GetPointsCodeHandler(c tele.Context) error {
 
 func RedeemPointsHandler(c tele.Context) error {
 	user := c.Sender()
-	collection := client.Database(dbName).Collection("customer")
+	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
@@ -212,14 +236,14 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	}
 
 	user := c.Sender()
-	collection := client.Database(dbName).Collection("customer")
+	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
-	historyCollection := client.Database(dbName).Collection("history")
-	historyRecord := HistoryRecord{
+	historyCollection := client.Database(dbName).Collection(historyCollection)
+	historyRecord := History{
 		CustomerID: customer.ID.String(),
 		Score:      20,
 		Type:       "redeem",
@@ -240,14 +264,14 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	}
 
 	user := c.Sender()
-	collection := client.Database(dbName).Collection("customer")
+	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
-	historyCollection := client.Database(dbName).Collection("history")
-	historyRecord := HistoryRecord{
+	historyCollection := client.Database(dbName).Collection(historyCollection)
+	historyRecord := History{
 		CustomerID: customer.ID.String(),
 		Score:      25,
 		Type:       "redeem",
@@ -308,6 +332,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
+	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
 	log.Fatal(http.ListenAndServe(":12345", router))
 }
