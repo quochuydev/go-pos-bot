@@ -1,5 +1,3 @@
-# go-pos-bot
-
 ## DIY
 
 ### Manual create Telegram bot
