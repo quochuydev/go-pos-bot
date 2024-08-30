@@ -37,7 +37,7 @@ type Customer struct {
 	ID             primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
 	FirstName      string             `json:"firstName,omitempty" bson:"firstName,omitempty"`
 	Username       string             `json:"username,omitempty" bson:"username,omitempty"`
-	TelegramUserId string             `json:"telegramUserId,omitempty" bson:"TelegramUserId,omitempty"`
+	TelegramUserId string             `json:"telegramUserId,omitempty" bson:"telegramUserId,omitempty"`
 	Score          float64            `json:"score" bson:"score"`
 }
 
@@ -100,13 +100,15 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 		collection := client.Database(dbName).Collection("customer")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
+
 		var customer Customer
-		collection.FindOne(ctx, bson.M{"telegramUserId": TelegramUserId}).Decode(&customer)
+		collection.FindOne(ctx, bson.M{"telegramUserId": TelegramUserId.(string)}).Decode(&customer)
 		fmt.Println("customer", customer)
+
 		newScore := customer.Score + req.Score
 		collection.UpdateOne(
 			context.Background(),
-			bson.M{"_id": customer.ID.String()},
+			bson.M{"_id": customer.ID},
 			bson.M{"$set": bson.M{"score": newScore}},
 		)
 
@@ -178,7 +180,7 @@ func RedeemPointsHandler(c tele.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
-	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 	score := fmt.Sprint(customer.Score)
 
 	exchangeDrinkBtn := telebot.InlineButton{
@@ -196,7 +198,7 @@ func RedeemPointsHandler(c tele.Context) error {
 		},
 	}
 
-	m := "Hello " + customer.FirstName + " you have: " + score + " points.\nExchange points to get free drink:"
+	m := "Hello " + customer.FirstName + " you have: " + score + " points.\n\nExchange points to get free drink:"
 	return c.Send(m, replyMarkup)
 }
 
@@ -214,7 +216,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
-	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
 	historyCollection := client.Database(dbName).Collection("history")
 	historyRecord := HistoryRecord{
@@ -242,7 +244,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var customer Customer
-	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
 	historyCollection := client.Database(dbName).Collection("history")
 	historyRecord := HistoryRecord{
@@ -254,6 +256,10 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
 	return c.Send("Exchange free food for " + customer.FirstName)
+}
+
+func NukeEndpoint(response http.ResponseWriter, request *http.Request) {
+	client.Database(dbName).Drop(context.Background())
 }
 
 func main() {
@@ -300,6 +306,7 @@ func main() {
 	}()
 
 	router := mux.NewRouter()
+	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
 	log.Fatal(http.ListenAndServe(":12345", router))

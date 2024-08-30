@@ -15,7 +15,7 @@
 #### Test APIs
 
 ```sh
-curl -X POST -H "Content-Type: application/json" -d '{"code": "475072", "score": 1}' http://localhost:12345/api/qrcode/verify
+curl -X POST -H "Content-Type: application/json" -d '{"code": "889351", "score": 1.2}' http://localhost:12345/api/qrcode/verify
 
 curl http://localhost:12345/api/customers
 ```
