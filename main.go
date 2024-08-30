@@ -57,6 +57,57 @@ var dbName string = "pos"
 var customerCollection string = "customer"
 var historyCollection string = "history"
 
+func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
+
+	token := os.Getenv("TELEGRAM_TOKEN")
+	if token == "" {
+		log.Fatalf("TELEGRAM_TOKEN is not set in .env file")
+	}
+
+	mongoUrl := os.Getenv("MONGO_URL")
+	if mongoUrl == "" {
+		log.Fatalf("MONGO_URL is not set in .env file")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	clientOptions := options.Client().ApplyURI(os.Getenv("MONGO_URL"))
+	client, _ = mongo.Connect(ctx, clientOptions)
+
+	pref := tele.Settings{
+		Token:  os.Getenv("TELEGRAM_TOKEN"),
+		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+	}
+
+	b, err := tele.NewBot(pref)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+
+	b.Handle("/start", StartHandler)
+	b.Handle("/get_points_code", GetPointsCodeHandler)
+	b.Handle("/redeem_points", RedeemPointsHandler)
+	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
+	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, ExchangeFoodHandler)
+
+	go func() {
+		fmt.Println("Starting Telegram bot...")
+		b.Start()
+	}()
+
+	router := mux.NewRouter()
+	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
+	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
+	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
+	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
+	log.Fatal(http.ListenAndServe(":12345", router))
+}
+
 func generateRandomCode() string {
 	return strconv.Itoa(100000 + rand.Intn(900000))
 }
@@ -289,55 +340,4 @@ func ExchangeFoodHandler(c telebot.Context) error {
 
 func NukeEndpoint(response http.ResponseWriter, request *http.Request) {
 	client.Database(dbName).Drop(context.Background())
-}
-
-func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-
-	token := os.Getenv("TELEGRAM_TOKEN")
-	if token == "" {
-		log.Fatalf("TELEGRAM_TOKEN is not set in .env file")
-	}
-
-	mongoUrl := os.Getenv("MONGO_URL")
-	if mongoUrl == "" {
-		log.Fatalf("MONGO_URL is not set in .env file")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	clientOptions := options.Client().ApplyURI(os.Getenv("MONGO_URL"))
-	client, _ = mongo.Connect(ctx, clientOptions)
-
-	pref := tele.Settings{
-		Token:  os.Getenv("TELEGRAM_TOKEN"),
-		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
-	}
-
-	b, err := tele.NewBot(pref)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	b.Handle("/start", StartHandler)
-	b.Handle("/get_points_code", GetPointsCodeHandler)
-	b.Handle("/redeem_points", RedeemPointsHandler)
-	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
-	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, ExchangeFoodHandler)
-
-	go func() {
-		fmt.Println("Starting Telegram bot...")
-		b.Start()
-	}()
-
-	router := mux.NewRouter()
-	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
-	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
-	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
-	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
-	log.Fatal(http.ListenAndServe(":12345", router))
 }
