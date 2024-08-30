@@ -10,6 +10,20 @@
 
 ### Deploy Golang in AWS EC2
 
+build for aws linux
+
+```
+uname -s
+
+uname -m
+```
+
+If the outputs match Linux and x86_64, then the corresponding values in Go would be:
+
+```
+GOOS=linux GOARCH=amd64 go build -o myapp
+```
+
 ### Integrate to POS application
 
 #### Test APIs
