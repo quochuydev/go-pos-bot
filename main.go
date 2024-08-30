@@ -160,13 +160,14 @@ func StartHandler(c tele.Context) error {
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			customerPayload := Customer{
+			cp := Customer{
 				FirstName:      user.FirstName,
 				Username:       user.Username,
 				TelegramUserId: tid,
 				Score:          0,
 			}
-			collection.InsertOne(ctx, customerPayload)
+			collection.InsertOne(ctx, cp)
+			fmt.Println("Application have new customer", cp)
 		} else {
 			log.Fatal(err)
 		}
