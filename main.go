@@ -49,6 +49,7 @@ type VerificationRequest struct {
 type HistoryRecord struct {
 	CustomerID string  `bson:"customer_id"`
 	Score      float64 `bson:"score"`
+	Type       string  `bson:"type"`
 	Timestamp  int64   `bson:"timestamp"`
 }
 
@@ -113,6 +114,7 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 		historyRecord := HistoryRecord{
 			CustomerID: customer.ID.String(),
 			Score:      req.Score,
+			Type:       "buy",
 			Timestamp:  time.Now().Unix(),
 		}
 		historyCollection.InsertOne(context.Background(), historyRecord)
@@ -124,16 +126,9 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	}
 }
 
-func StartHandlerfunc(c tele.Context) error {
+func StartHandler(c tele.Context) error {
 	user := c.Sender()
 	tid := fmt.Sprint(user.ID)
-
-	customerPayload := Customer{
-		FirstName:      user.FirstName,
-		Username:       user.Username,
-		TelegramUserId: tid,
-		Score:          0,
-	}
 
 	collection := client.Database(dbName).Collection("customer")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -143,7 +138,14 @@ func StartHandlerfunc(c tele.Context) error {
 	collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
 	fmt.Println("customer", customer)
 
+	customerPayload := Customer{
+		FirstName:      user.FirstName,
+		Username:       user.Username,
+		TelegramUserId: tid,
+		Score:          0,
+	}
 	collection.InsertOne(ctx, customerPayload)
+
 	return c.Send("Hello " + user.FirstName)
 }
 
@@ -153,18 +155,16 @@ func GetPointsCodeHandler(c tele.Context) error {
 	codeStore.Store(code, fmt.Sprint(user.ID))
 	c.Send("Points code: " + code)
 
-	qrCode, err := qrcode.New(code, qrcode.Medium)
+	qr, err := qrcode.New(code, qrcode.Medium)
 	if err != nil {
 		return c.Send("Failed to generate QR code")
 	}
 
-	var qrBuffer bytes.Buffer
-	qrCode.Write(200, &qrBuffer)
-
+	var buffer bytes.Buffer
+	qr.Write(200, &buffer)
 	imageFile := telebot.File{
-		FileReader: bytes.NewReader(qrBuffer.Bytes()),
+		FileReader: bytes.NewReader(buffer.Bytes()),
 	}
-
 	photo := &telebot.Photo{
 		File: imageFile,
 	}
@@ -216,6 +216,15 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
+	historyCollection := client.Database(dbName).Collection("history")
+	historyRecord := HistoryRecord{
+		CustomerID: customer.ID.String(),
+		Score:      20,
+		Type:       "redeem",
+		Timestamp:  time.Now().Unix(),
+	}
+	historyCollection.InsertOne(context.Background(), historyRecord)
+
 	return c.Send("Exchange free drink for " + customer.FirstName)
 }
 
@@ -234,6 +243,15 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	defer cancel()
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"TelegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+	historyCollection := client.Database(dbName).Collection("history")
+	historyRecord := HistoryRecord{
+		CustomerID: customer.ID.String(),
+		Score:      25,
+		Type:       "redeem",
+		Timestamp:  time.Now().Unix(),
+	}
+	historyCollection.InsertOne(context.Background(), historyRecord)
 
 	return c.Send("Exchange free food for " + customer.FirstName)
 }
@@ -270,7 +288,7 @@ func main() {
 		return
 	}
 
-	b.Handle("/start", StartHandlerfunc)
+	b.Handle("/start", StartHandler)
 	b.Handle("/get_points_code", GetPointsCodeHandler)
 	b.Handle("/redeem_points", RedeemPointsHandler)
 	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
