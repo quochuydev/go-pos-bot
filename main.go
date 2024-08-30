@@ -46,6 +46,8 @@ type History struct {
 var dbName string = "pos"
 var customerCollection string = "customer"
 var historyCollection string = "history"
+var drinkPoint float64 = 2
+var foodPoint float64 = 4
 
 type ShortCode struct {
 	Code string `json:"code"`
@@ -271,13 +273,19 @@ func RedeemPointsHandler(c tele.Context) error {
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 	score := fmt.Sprint(customer.Score)
 
+	if customer.Score < drinkPoint {
+		m := "You have: " + score + " points.\n\nLet's order to get points"
+		fmt.Println("redeem_points", customer.FirstName, score)
+		return c.Send(m)
+	}
+
 	exchangeDrinkBtn := telebot.InlineButton{
 		Unique: "exchange_drink",
-		Text:   "Exchange free drink (20 points)",
+		Text:   fmt.Sprintf("Exchange free drink (%.0f points)", drinkPoint),
 	}
 	exchangeFoodBtn := telebot.InlineButton{
 		Unique: "exchange_food",
-		Text:   "Exchange free food (25 points)",
+		Text:   fmt.Sprintf("Exchange free drink (%.0f points)", foodPoint),
 	}
 	replyMarkup := &telebot.ReplyMarkup{
 		InlineKeyboard: [][]telebot.InlineButton{
@@ -286,7 +294,7 @@ func RedeemPointsHandler(c tele.Context) error {
 		},
 	}
 
-	m := "Hello " + customer.FirstName + " you have: " + score + " points.\n\nExchange points to get free drink:"
+	m := "You have: " + score + " points.\n\nExchange points to get free drink"
 	fmt.Println("redeem_points", customer.FirstName, score)
 	return c.Send(m, replyMarkup)
 }
@@ -310,7 +318,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	historyCollection := client.Database(dbName).Collection(historyCollection)
 	historyRecord := History{
 		CustomerID: customer.ID.String(),
-		Score:      20,
+		Score:      drinkPoint,
 		Type:       "redeem",
 		Timestamp:  time.Now().Unix(),
 	}
@@ -339,7 +347,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	historyCollection := client.Database(dbName).Collection(historyCollection)
 	historyRecord := History{
 		CustomerID: customer.ID.String(),
-		Score:      25,
+		Score:      foodPoint,
 		Type:       "redeem",
 		Timestamp:  time.Now().Unix(),
 	}
