@@ -128,9 +128,11 @@ func generateRandomCode() string {
 func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	var customers []Customer
+
 	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
 		log.Fatal(err)
@@ -141,15 +143,18 @@ func GetCustomersEndpoint(response http.ResponseWriter, request *http.Request) {
 		cursor.Decode(&customer)
 		customers = append(customers, customer)
 	}
+
 	json.NewEncoder(response).Encode(customers)
 }
 
 func GetHistoriesEndpoint(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Content-Type", "application/json")
 	var histories []History
+
 	collection := client.Database(dbName).Collection(historyCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+
 	cursor, err := collection.Find(ctx, bson.M{})
 	if err != nil {
 		log.Fatal(err)
@@ -160,6 +165,7 @@ func GetHistoriesEndpoint(response http.ResponseWriter, request *http.Request) {
 		cursor.Decode(&h)
 		histories = append(histories, h)
 	}
+
 	json.NewEncoder(response).Encode(histories)
 }
 
@@ -173,42 +179,45 @@ func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
 	fmt.Println("req.Code", req.Code)
 	fmt.Println("req.Score", req.Score)
 
-	if TelegramUserId, exists := codeStore.Load(req.Code); exists {
-		if TelegramUserId == nil || TelegramUserId.(string) == "" {
-			http.Error(response, "Invalid customer ID", http.StatusBadRequest)
-			return
-		}
+	tid, exists := codeStore.Load(req.Code)
 
-		codeStore.Delete(req.Code)
-
-		collection := client.Database(dbName).Collection(customerCollection)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		var customer Customer
-		collection.FindOne(ctx, bson.M{"telegramUserId": TelegramUserId.(string)}).Decode(&customer)
-
-		newScore := customer.Score + req.Score
-		collection.UpdateOne(
-			context.Background(),
-			bson.M{"_id": customer.ID},
-			bson.M{"$set": bson.M{"score": newScore}},
-		)
-
-		historyCollection := client.Database(dbName).Collection(historyCollection)
-		historyRecord := History{
-			CustomerID: customer.ID.String(),
-			Score:      req.Score,
-			Type:       "buy",
-			Timestamp:  time.Now().Unix(),
-		}
-		historyCollection.InsertOne(context.Background(), historyRecord)
-
-		response.WriteHeader(http.StatusOK)
-		response.Write([]byte("Code verified and history saved"))
-	} else {
+	if !exists {
 		http.Error(response, "Invalid code", http.StatusBadRequest)
+		return
 	}
+
+	if tid == nil || tid.(string) == "" {
+		http.Error(response, "Invalid customer ID", http.StatusBadRequest)
+		return
+	}
+
+	codeStore.Delete(req.Code)
+
+	collection := client.Database(dbName).Collection(customerCollection)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"telegramUserId": tid.(string)}).Decode(&customer)
+
+	newScore := customer.Score + req.Score
+	collection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": customer.ID},
+		bson.M{"$set": bson.M{"score": newScore}},
+	)
+
+	historyCollection := client.Database(dbName).Collection(historyCollection)
+	historyRecord := History{
+		CustomerID: customer.ID.String(),
+		Score:      req.Score,
+		Type:       "buy",
+		Timestamp:  time.Now().Unix(),
+	}
+	historyCollection.InsertOne(context.Background(), historyRecord)
+
+	response.WriteHeader(http.StatusOK)
+	json.NewEncoder(response).Encode(map[string]string{"telegramUserId": tid.(string)})
 }
 
 func StartHandler(c tele.Context) error {
