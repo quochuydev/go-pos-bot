@@ -40,7 +40,12 @@ jobs:
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
+
+          echo "TELEGRAM_TOKEN=$TELEGRAM_TOKEN" >> .env
+          echo "MONGO_URL=$MONGO_URL" >> .env
+
           scp -i private_key.pem -o StrictHostKeyChecking=no myapp $USER@$HOST:/home/$USER/
+          scp -i private_key.pem -o StrictHostKeyChecking=no .env $USER@$HOST:/home/$USER/
           ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
             chmod +x /home/$USER/myapp
             nohup /home/$USER/myapp > /home/$USER/myapp.log 2>&1 &
