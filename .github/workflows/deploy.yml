@@ -40,8 +40,8 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           MONGO_URL: ${{ secrets.MONGO_URL }}
         run: |
-          echo "$PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
+          echo "$PRIVATE_KEY" > private_key.pem 2>/dev/null || true
+          chmod 600 private_key.pem 2>/dev/null || true
 
           echo "TELEGRAM_TOKEN=$TELEGRAM_TOKEN" >> .env
           echo "MONGO_URL=$MONGO_URL" >> .env
