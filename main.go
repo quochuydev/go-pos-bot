@@ -70,6 +70,11 @@ func main() {
 		log.Fatalf("Error loading .env file")
 	}
 
+	server := os.Getenv("SERVER")
+	if server == "" {
+		log.Fatalf("SERVER is not set in .env file")
+	}
+
 	token := os.Getenv("TELEGRAM_TOKEN")
 	if token == "" {
 		log.Fatalf("TELEGRAM_TOKEN is not set in .env file")
@@ -270,6 +275,7 @@ func StartHandler(c tele.Context) error {
 				"customer": map[string]interface{}{
 					"first_name": user.FirstName,
 					"last_name":  tid,
+					"email":      fmt.Sprintf("%s@yopmail.%s", tid, os.Getenv("SERVER")),
 				},
 			}
 

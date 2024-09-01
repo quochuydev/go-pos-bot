@@ -49,6 +49,7 @@ jobs:
           chmod 600 private_key.pem
 
           echo "Creating .env file..."
+          echo "SERVER=dev" >> .env
           echo "TELEGRAM_TOKEN=$TELEGRAM_TOKEN" >> .env
           echo "MONGO_URL=$MONGO_URL" >> .env
           echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
