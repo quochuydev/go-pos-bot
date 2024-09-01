@@ -112,7 +112,6 @@ func main() {
 	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
-	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
 	router.HandleFunc("/api/shopify/webhook", func(w http.ResponseWriter, r *http.Request) {
 		topic := r.Header.Get("X-Shopify-Topic")
 		body, err := io.ReadAll(r.Body)
@@ -129,7 +128,7 @@ func main() {
 
 		fmt.Println("topic", topic)
 
-		if topic == "orders/create" || topic == "orders/updated" {
+		if topic == "orders/create" {
 			customer, ok := result["customer"].(map[string]interface{})
 			if !ok {
 				http.Error(w, "Customer field is missing", http.StatusOK)
@@ -176,14 +175,8 @@ func main() {
 			}
 		}
 
-		if topic == "customers/create" || topic == "customers/updated" {
-			customerID, ok := result["id"].(float64)
-			if !ok {
-				http.Error(w, "Customer ID is missing", http.StatusOK)
-				return
-			}
-
-			fmt.Println("Customer ID: ", customerID)
+		if topic == "orders/updated" {
+			//
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -253,57 +246,6 @@ func GetHistoriesEndpoint(response http.ResponseWriter, request *http.Request) {
 	}
 
 	json.NewEncoder(response).Encode(histories)
-}
-
-func VerifyCodeEndpoint(response http.ResponseWriter, request *http.Request) {
-	var req VerificationRequest
-	if err := json.NewDecoder(request.Body).Decode(&req); err != nil {
-		http.Error(response, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	fmt.Println("req.Code", req.Code)
-	fmt.Println("req.Score", req.Score)
-
-	tid, exists := codeStore.Load(req.Code)
-
-	if !exists {
-		http.Error(response, "Invalid code", http.StatusBadRequest)
-		return
-	}
-
-	if tid == nil || tid.(string) == "" {
-		http.Error(response, "Invalid customer ID", http.StatusBadRequest)
-		return
-	}
-
-	codeStore.Delete(req.Code)
-
-	collection := client.Database(dbName).Collection(customerCollection)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	var customer Customer
-	collection.FindOne(ctx, bson.M{"telegramUserId": tid.(string)}).Decode(&customer)
-
-	newScore := customer.Score + req.Score
-	collection.UpdateOne(
-		context.Background(),
-		bson.M{"_id": customer.ID},
-		bson.M{"$set": bson.M{"score": newScore}},
-	)
-
-	historyCollection := client.Database(dbName).Collection(historyCollection)
-	historyRecord := History{
-		CustomerID: customer.ID.String(),
-		Score:      req.Score,
-		Type:       "buy",
-		Timestamp:  time.Now().Unix(),
-	}
-	historyCollection.InsertOne(context.Background(), historyRecord)
-
-	response.WriteHeader(http.StatusOK)
-	json.NewEncoder(response).Encode(map[string]string{"telegramUserId": tid.(string)})
 }
 
 func StartHandler(c tele.Context) error {
@@ -438,6 +380,9 @@ func RedeemPointsHandler(c tele.Context) error {
 }
 
 func ExchangeDrinkHandler(c telebot.Context) error {
+	drinkPriceRule := "1716197753141"
+	code := generateRandomCode()
+
 	updatedMarkup := &telebot.ReplyMarkup{
 		InlineKeyboard: [][]telebot.InlineButton{},
 	}
@@ -453,6 +398,52 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
+	token := os.Getenv("SHOPIFY_TOKEN")
+	storeURL := os.Getenv("SHOPIFY_STORE_URL")
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, drinkPriceRule)
+
+	payload := map[string]interface{}{
+		"discount_code": map[string]interface{}{
+			"code": code,
+		},
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalf("Error marshalling data: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(data))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Shopify-Access-Token", token)
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		log.Fatalf("Failed: %s", resp.Status)
+	}
+
+	var responseBody map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		log.Fatalf("Error reading response body: %v", err)
+	}
+
+	newScore := customer.Score - 2
+
+	collection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": customer.ID},
+		bson.M{"$set": bson.M{"score": newScore}},
+	)
+
 	historyCollection := client.Database(dbName).Collection(historyCollection)
 	historyRecord := History{
 		CustomerID: customer.ID.String(),
@@ -463,7 +454,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
 	fmt.Println("exchange_drink", customer.FirstName)
-	return c.Send("Exchange free drink for " + customer.FirstName)
+	return c.Send("Exchange free drink for " + customer.FirstName + " - code: " + code)
 }
 
 func ExchangeFoodHandler(c telebot.Context) error {
