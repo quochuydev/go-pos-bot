@@ -103,7 +103,7 @@ func main() {
 
 	b.Handle("/start", StartHandler)
 	b.Handle(telebot.OnText, TextHandler)
-	b.Handle("/get_points_code", GetPointsCodeHandler)
+	b.Handle("/get_customer_info", GetCustomerInfoHandler)
 	b.Handle("/redeem_points", RedeemPointsHandler)
 	b.Handle(&telebot.InlineButton{Unique: "exchange_drink"}, ExchangeDrinkHandler)
 	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, ExchangeFoodHandler)
@@ -203,7 +203,7 @@ func TextHandler(c telebot.Context) error {
 	u := c.Sender()
 	t := c.Text()
 	fmt.Println("Received message:", u.FirstName, t)
-	return c.Send("There are commands I support:\nGet points code: /get_points_code\nRedeem points: /redeem_points")
+	return c.Send("There are commands I support:\nGet customer info: /get_customer_info\nRedeem points: /redeem_points")
 }
 
 func generateRandomCode() string {
@@ -327,13 +327,19 @@ func StartHandler(c tele.Context) error {
 	return c.Send("Hello " + user.FirstName)
 }
 
-func GetPointsCodeHandler(c tele.Context) error {
+func GetCustomerInfoHandler(c tele.Context) error {
 	user := c.Sender()
-	code := generateRandomCode()
-	codeStore.Store(code, fmt.Sprint(user.ID))
-	c.Send("Points code: " + code)
+	tid := fmt.Sprint(user.ID)
 
-	qr, err := qrcode.New(code, qrcode.Medium)
+	collection := client.Database(dbName).Collection(customerCollection)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var customer Customer
+	collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
+
+	c.Send("telegram user ID: %s\nshopify user ID: %s", tid, customer.ShopifyCustomerId)
+
+	qr, err := qrcode.New(tid, qrcode.Medium)
 	if err != nil {
 		return c.Send("Failed to generate QR code")
 	}
@@ -344,10 +350,11 @@ func GetPointsCodeHandler(c tele.Context) error {
 		FileReader: bytes.NewReader(buffer.Bytes()),
 	}
 	photo := &telebot.Photo{
-		File: imageFile,
+		File:    imageFile,
+		Caption: user.FirstName,
 	}
 
-	fmt.Println("get_points_code", user.FirstName)
+	fmt.Println("get_customer_info", user.FirstName)
 	return c.Send(photo)
 }
 
