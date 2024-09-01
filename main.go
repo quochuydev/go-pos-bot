@@ -115,8 +115,19 @@ func main() {
 
 	router := mux.NewRouter()
 	router.HandleFunc("/api/nuke", NukeEndpoint).Methods("GET")
-	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
+	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
+	router.HandleFunc("/api/customers/increase-points", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			TelegramUserId string `json:"telegramUserId"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		var c Customer
+		collection := client.Database(dbName).Collection(customerCollection)
+		collection.FindOne(context.Background(), bson.M{"telegramUserId": body.TelegramUserId}).Decode(&c)
+		IncreasePointsHandler(b, c)
+		w.WriteHeader(http.StatusOK)
+	}).Methods("POST")
 	router.HandleFunc("/api/shopify/webhook", func(w http.ResponseWriter, r *http.Request) {
 		topic := r.Header.Get("X-Shopify-Topic")
 		body, err := io.ReadAll(r.Body)
@@ -150,38 +161,11 @@ func main() {
 			fmt.Println("Customer ID: ", sid)
 
 			collection := client.Database(dbName).Collection(customerCollection)
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
 
 			var c Customer
-			collection.FindOne(ctx, bson.M{"shopifyCustomerId": sid}).Decode(&c)
+			collection.FindOne(context.Background(), bson.M{"shopifyCustomerId": sid}).Decode(&c)
 			fmt.Println("c: ", c)
-
-			if c.TelegramUserId != "" {
-				var score float64 = 2
-				newScore := c.Score + score
-
-				collection.UpdateOne(
-					context.Background(),
-					bson.M{"_id": c.ID},
-					bson.M{"$set": bson.M{"score": newScore}},
-				)
-
-				historyCollection := client.Database(dbName).Collection(historyCollection)
-				historyRecord := History{
-					CustomerID: c.ID.String(),
-					Score:      score,
-					Type:       "buy",
-					Timestamp:  time.Now().Unix(),
-				}
-				historyCollection.InsertOne(context.Background(), historyRecord)
-
-				sendMessage(b, c.TelegramUserId, "You are increased "+fmt.Sprint(score)+" points")
-			}
-		}
-
-		if topic == "orders/updated" {
-			//
+			IncreasePointsHandler(b, c)
 		}
 
 		w.WriteHeader(http.StatusOK)
@@ -189,13 +173,34 @@ func main() {
 	log.Fatal(http.ListenAndServe(":12345", router))
 }
 
-func sendMessage(b *telebot.Bot, userID string, message string) error {
-	chatID, err := strconv.ParseInt(userID, 10, 64)
-	if err != nil {
-		return err
+func IncreasePointsHandler(b *telebot.Bot, c Customer) {
+	collection := client.Database(dbName).Collection(customerCollection)
+
+	if c.TelegramUserId != "" {
+		var score float64 = 2
+		newScore := c.Score + score
+
+		collection.UpdateOne(
+			context.Background(),
+			bson.M{"_id": c.ID},
+			bson.M{"$set": bson.M{"score": newScore}},
+		)
+
+		historyCollection := client.Database(dbName).Collection(historyCollection)
+		historyRecord := History{
+			CustomerID: c.ID.String(),
+			Score:      score,
+			Type:       "buy",
+			Timestamp:  time.Now().Unix(),
+		}
+		historyCollection.InsertOne(context.Background(), historyRecord)
+
+		chatID, err := strconv.ParseInt(c.TelegramUserId, 10, 64)
+		if err != nil {
+			return
+		}
+		b.Send(&telebot.Chat{ID: chatID}, "You are increased "+fmt.Sprint(score)+" points")
 	}
-	_, err = b.Send(&telebot.Chat{ID: chatID}, message)
-	return err
 }
 
 func TextHandler(c telebot.Context) error {
@@ -466,7 +471,8 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
 	fmt.Println("exchange_drink", customer.FirstName)
-	return c.Send("Exchange free drink for " + customer.FirstName + " - code: " + code)
+	m := fmt.Sprintf("Exchange free drink for %s\ncode: %s", customer.FirstName, code)
+	return c.Send(m)
 }
 
 func ExchangeFoodHandler(c telebot.Context) error {
@@ -547,9 +553,16 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	historyCollection.InsertOne(context.Background(), historyRecord)
 
 	fmt.Println("exchange_food", customer.FirstName)
-	return c.Send("Exchange free food for " + customer.FirstName)
+	m := fmt.Sprintf("Exchange free food for %s\ncode: %s", customer.FirstName, code)
+	return c.Send(m)
 }
 
 func NukeEndpoint(response http.ResponseWriter, request *http.Request) {
+	token := request.URL.Query().Get("token")
+	if token != os.Getenv("TELEGRAM_TOKEN") {
+		response.WriteHeader(http.StatusForbidden)
+		return
+	}
 	client.Database(dbName).Drop(context.Background())
+	response.WriteHeader(http.StatusOK)
 }
