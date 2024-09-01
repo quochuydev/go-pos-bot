@@ -117,3 +117,101 @@ curl -X POST -H "Content-Type: application/json" -d '{"code": "889351", "score":
 
 curl http://localhost:12345/api/customers
 ```
+
+```curl
+NGROK_URL=https://34ef-2402-800-63ba-80c9-895e-458f-d016-7f38.ngrok-free.app
+SHOPIFY_TOKEN=
+
+curl -X POST "https://quickstart-fa54a928.myshopify.com/admin/api/2023-07/webhooks.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "webhook": {
+    "topic": "orders/create",
+    "address": "'$NGROK_URL'/api/shopify/webhook",
+    "format": "json"
+  }
+}'
+```
+
+==> webhook_id:1660397355317
+
+```curl
+NGROK_URL=https://34ef-2402-800-63ba-80c9-895e-458f-d016-7f38.ngrok-free.app
+SHOPIFY_TOKEN=
+
+curl -X POST "https://quickstart-fa54a928.myshopify.com/admin/api/2023-07/webhooks.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "webhook": {
+    "topic": "orders/updated",
+    "address": "'$NGROK_URL'/api/shopify/webhook",
+    "format": "json"
+  }
+}'
+```
+
+==> webhook_id:1660406628661
+
+```curl
+NGROK_URL=https://34ef-2402-800-63ba-80c9-895e-458f-d016-7f38.ngrok-free.app
+SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com
+SHOPIFY_TOKEN=
+
+curl -X PUT "$SHOPIFY_STORE_URL/admin/api/2023-07/webhooks/1660397355317.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "webhook": {
+    "topic": "orders/create",
+    "address": "'$NGROK_URL'/api/shopify/webhook",
+    "format": "json"
+  }
+}'
+
+SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com
+SHOPIFY_TOKEN=
+
+curl -X GET "$SHOPIFY_STORE_URL/admin/api/2023-07/webhooks.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN"
+```
+
+```curl
+SHOPIFY_TOKEN=
+SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com
+
+curl -X POST "$SHOPIFY_STORE_URL/admin/api/2023-07/customers.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN" \
+-H "Content-Type: application/json" \
+-d '{
+  "customer": {
+    "first_name": "John",
+    "last_name": "123123123"
+  }
+}'
+```
+
+```curl
+curl -X GET "$SHOPIFY_STORE_URL/admin/api/2023-07/price_rules.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN"
+
+SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com
+SHOPIFY_TOKEN=
+
+curl -X POST "$SHOPIFY_STORE_URL/admin/api/2023-07/price_rules/1716197753141/discount_codes.json" \
+-H "Content-Type: application/json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN" \
+-d '{
+  "discount_code": {
+    "code": "DRINK100"
+  }
+}'
+
+SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com
+SHOPIFY_TOKEN=
+
+curl -X GET "$SHOPIFY_STORE_URL/admin/api/2023-07/price_rules/1716197753141/discount_codes.json" \
+-H "X-Shopify-Access-Token: $SHOPIFY_TOKEN"
+
+```
