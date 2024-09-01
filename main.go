@@ -394,7 +394,7 @@ func RedeemPointsHandler(c tele.Context) error {
 }
 
 func ExchangeDrinkHandler(c telebot.Context) error {
-	drinkPriceRule := "1716197753141"
+	priceRule := "1716197753141"
 	code := generateRandomCode()
 
 	updatedMarkup := &telebot.ReplyMarkup{
@@ -414,7 +414,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
-	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, drinkPriceRule)
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, priceRule)
 
 	payload := map[string]interface{}{
 		"discount_code": map[string]interface{}{
@@ -472,6 +472,9 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 }
 
 func ExchangeFoodHandler(c telebot.Context) error {
+	priceRule := "1716313260341"
+	code := generateRandomCode()
+
 	updatedMarkup := &telebot.ReplyMarkup{
 		InlineKeyboard: [][]telebot.InlineButton{},
 	}
@@ -486,6 +489,52 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	defer cancel()
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
+
+	token := os.Getenv("SHOPIFY_TOKEN")
+	storeURL := os.Getenv("SHOPIFY_STORE_URL")
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, priceRule)
+
+	payload := map[string]interface{}{
+		"discount_code": map[string]interface{}{
+			"code": code,
+		},
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalf("Error marshalling data: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(data))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Shopify-Access-Token", token)
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		log.Fatalf("Failed: %s", resp.Status)
+	}
+
+	var responseBody map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		log.Fatalf("Error reading response body: %v", err)
+	}
+
+	newScore := customer.Score - 4
+
+	collection.UpdateOne(
+		context.Background(),
+		bson.M{"_id": customer.ID},
+		bson.M{"$set": bson.M{"score": newScore}},
+	)
 
 	historyCollection := client.Database(dbName).Collection(historyCollection)
 	historyRecord := History{
