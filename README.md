@@ -69,10 +69,10 @@ server {
 
 server {
     listen 443 ssl;
-    server_name yourdomain.com www.yourdomain.com;
+    server_name gopos.quochuy.dev;
 
-    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/gopos.quochuy.dev/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/gopos.quochuy.dev/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
@@ -89,7 +89,7 @@ server {
 ```sh
 sudo yum install certbot python3-certbot-nginx -y
 
-sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
+sudo certbot --nginx -d gopos.quochuy.dev
 ```
 
 Test nginx
@@ -119,7 +119,7 @@ curl http://localhost:12345/api/customers
 ```
 
 ```curl
-NGROK_URL=https://34ef-2402-800-63ba-80c9-895e-458f-d016-7f38.ngrok-free.app
+NGROK_URL=https://gopos.quochuy.dev
 SHOPIFY_TOKEN=
 
 curl -X POST "https://quickstart-fa54a928.myshopify.com/admin/api/2023-07/webhooks.json" \
