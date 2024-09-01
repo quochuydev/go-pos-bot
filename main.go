@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -26,8 +25,6 @@ import (
 )
 
 var client *mongo.Client
-
-var codeStore sync.Map
 
 type Customer struct {
 	ID                primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
@@ -353,7 +350,7 @@ func GetCustomerInfoHandler(c tele.Context) error {
 	}
 	photo := &telebot.Photo{
 		File:    imageFile,
-		Caption: user.FirstName,
+		Caption: fmt.Sprintf("name: %s\ntelegram user ID: %s\nshopify user ID: %s", user.FirstName, tid, customer.ShopifyCustomerId),
 	}
 
 	fmt.Println("get_customer_info", user.FirstName)
