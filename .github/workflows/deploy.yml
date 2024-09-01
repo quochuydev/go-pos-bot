@@ -39,12 +39,16 @@ jobs:
           USER: ${{ secrets.EC2_USER }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           MONGO_URL: ${{ secrets.MONGO_URL }}
+          SHOPIFY_STORE_URL: ${{ vars.SHOPIFY_STORE_URL }}
+          SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
 
           echo "TELEGRAM_TOKEN=$TELEGRAM_TOKEN" >> .env
           echo "MONGO_URL=$MONGO_URL" >> .env
+          echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
+          echo "SHOPIFY_TOKEN=$SHOPIFY_TOKEN" >> .env
 
           ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
             pkill -f "/home/$USER/myapp"

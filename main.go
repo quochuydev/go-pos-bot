@@ -104,7 +104,8 @@ func main() {
 	b.Handle(&telebot.InlineButton{Unique: "exchange_food"}, ExchangeFoodHandler)
 
 	go func() {
-		fmt.Println("Starting Telegram bot...")
+		startTime := time.Now()
+		fmt.Printf("Starting Telegram bot at %s...\n", startTime.Format(time.RFC3339))
 		b.Start()
 	}()
 
