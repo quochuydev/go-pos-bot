@@ -490,6 +490,10 @@ func ExchangeFoodHandler(c telebot.Context) error {
 	var customer Customer
 	collection.FindOne(ctx, bson.M{"telegramUserId": fmt.Sprint(user.ID)}).Decode(&customer)
 
+	if customer.Score < foodPoint {
+		return c.Send("You have: " + fmt.Sprint(customer.Score) + " points.\n\nLet's order to get more points")
+	}
+
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
 	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, priceRule)
