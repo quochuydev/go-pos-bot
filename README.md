@@ -45,8 +45,8 @@ sudo yum install nginx
 
 ```sh
 sudo systemctl enable nginx
-sudo systemctl status nginx
 sudo systemctl start nginx
+sudo systemctl status nginx
 ```
 
 ```sh
@@ -102,21 +102,11 @@ expect: `nginx: configuration file /etc/nginx/nginx.conf test is successful`
 
 ```sh
 sudo systemctl reload nginx
-
-# or
-
-sudo systemctl restart nginx
 ```
 
 ### Integrate to POS application
 
-#### Test APIs
-
-```sh
-curl -X POST -H "Content-Type: application/json" -d '{"code": "889351", "score": 1.2}' http://localhost:12345/api/qrcode/verify
-
-curl http://localhost:12345/api/customers
-```
+#### Setup shopify webhook
 
 ```curl
 NGROK_URL=https://gopos.quochuy.dev
@@ -135,6 +125,8 @@ curl -X POST "https://quickstart-fa54a928.myshopify.com/admin/api/2023-07/webhoo
 ```
 
 ==> webhook_id:1660397355317
+
+#### Setup shopify discount verify with there APIs
 
 ```curl
 SHOPIFY_STORE_URL=https://quickstart-fa54a928.myshopify.com

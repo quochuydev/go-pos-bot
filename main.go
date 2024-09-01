@@ -275,11 +275,17 @@ func StartHandler(c tele.Context) error {
 			storeURL := os.Getenv("SHOPIFY_STORE_URL")
 			apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/customers.json", storeURL)
 
+			domain := "yopmail.local"
+
+			if os.Getenv("SERVER") != "local" {
+				domain = "yopmail.com"
+			}
+
 			payload := map[string]interface{}{
 				"customer": map[string]interface{}{
 					"first_name": user.FirstName,
 					"last_name":  tid,
-					"email":      fmt.Sprintf("%s@yopmail.%s", tid, os.Getenv("SERVER")),
+					"email":      fmt.Sprintf("%s@%s", tid, domain),
 				},
 			}
 
