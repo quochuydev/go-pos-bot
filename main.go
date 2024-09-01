@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -29,11 +30,12 @@ var client *mongo.Client
 var codeStore sync.Map
 
 type Customer struct {
-	ID             primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
-	FirstName      string             `json:"firstName,omitempty" bson:"firstName,omitempty"`
-	Username       string             `json:"username,omitempty" bson:"username,omitempty"`
-	TelegramUserId string             `json:"telegramUserId,omitempty" bson:"telegramUserId,omitempty"`
-	Score          float64            `json:"score" bson:"score"`
+	ID                primitive.ObjectID `json:"_id,omitempty" bson:"_id,omitempty"`
+	FirstName         string             `json:"firstName,omitempty" bson:"firstName,omitempty"`
+	Username          string             `json:"username,omitempty" bson:"username,omitempty"`
+	TelegramUserId    string             `json:"telegramUserId,omitempty" bson:"telegramUserId,omitempty"`
+	ShopifyCustomerId string             `json:"shopifyCustomerId,omitempty" bson:"shopifyCustomerId,omitempty"`
+	Score             float64            `json:"score" bson:"score"`
 }
 
 type History struct {
@@ -111,7 +113,91 @@ func main() {
 	router.HandleFunc("/api/customers", GetCustomersEndpoint).Methods("GET")
 	router.HandleFunc("/api/histories", GetHistoriesEndpoint).Methods("GET")
 	router.HandleFunc("/api/qrcode/verify", VerifyCodeEndpoint).Methods("POST")
+	router.HandleFunc("/api/shopify/webhook", func(w http.ResponseWriter, r *http.Request) {
+		topic := r.Header.Get("X-Shopify-Topic")
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "Cannot read body", http.StatusOK)
+			return
+		}
+
+		var result map[string]interface{}
+		if err := json.Unmarshal(body, &result); err != nil {
+			http.Error(w, "Cannot unmarshal JSON", http.StatusOK)
+			return
+		}
+
+		fmt.Println("topic", topic)
+
+		if topic == "orders/create" || topic == "orders/updated" {
+			customer, ok := result["customer"].(map[string]interface{})
+			if !ok {
+				http.Error(w, "Customer field is missing", http.StatusOK)
+				return
+			}
+
+			customerID, ok := customer["id"].(float64)
+			if !ok {
+				http.Error(w, "Customer ID is missing", http.StatusOK)
+				return
+			}
+
+			sid := fmt.Sprintf("%.0f", customerID)
+			fmt.Println("Customer ID: ", sid)
+
+			collection := client.Database(dbName).Collection(customerCollection)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			var c Customer
+			collection.FindOne(ctx, bson.M{"shopifyCustomerId": sid}).Decode(&c)
+			fmt.Println("c: ", c)
+
+			if c.TelegramUserId != "" {
+				var score float64 = 2
+				newScore := c.Score + score
+
+				collection.UpdateOne(
+					context.Background(),
+					bson.M{"_id": c.ID},
+					bson.M{"$set": bson.M{"score": newScore}},
+				)
+
+				historyCollection := client.Database(dbName).Collection(historyCollection)
+				historyRecord := History{
+					CustomerID: c.ID.String(),
+					Score:      score,
+					Type:       "buy",
+					Timestamp:  time.Now().Unix(),
+				}
+				historyCollection.InsertOne(context.Background(), historyRecord)
+
+				sendMessage(b, c.TelegramUserId, "You are increased "+fmt.Sprint(score)+" points")
+			}
+		}
+
+		if topic == "customers/create" || topic == "customers/updated" {
+			customerID, ok := result["id"].(float64)
+			if !ok {
+				http.Error(w, "Customer ID is missing", http.StatusOK)
+				return
+			}
+
+			fmt.Println("Customer ID: ", customerID)
+		}
+
+		w.WriteHeader(http.StatusOK)
+	}).Methods("POST")
 	log.Fatal(http.ListenAndServe(":12345", router))
+}
+
+func sendMessage(b *telebot.Bot, userID string, message string) error {
+	chatID, err := strconv.ParseInt(userID, 10, 64)
+	if err != nil {
+		return err
+	}
+	_, err = b.Send(&telebot.Chat{ID: chatID}, message)
+	return err
 }
 
 func TextHandler(c telebot.Context) error {
@@ -224,20 +310,63 @@ func StartHandler(c tele.Context) error {
 	user := c.Sender()
 	tid := fmt.Sprint(user.ID)
 
+	token := os.Getenv("SHOPIFY_TOKEN")
+	storeURL := os.Getenv("SHOPIFY_STORE_URL")
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/customers.json", storeURL)
+
+	payload := map[string]interface{}{
+		"customer": map[string]interface{}{
+			"first_name": user.FirstName,
+			"last_name":  tid,
+		},
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatalf("Error marshalling customer data: %v", err)
+	}
+
+	req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(data))
+	if err != nil {
+		log.Fatalf("Error creating request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Shopify-Access-Token", token)
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatalf("Error sending request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		log.Fatalf("Failed to create customer: %s", resp.Status)
+	}
+
+	var responseBody map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+		log.Fatalf("Error reading response body: %v", err)
+	}
+
+	customerID := responseBody["customer"].(map[string]interface{})["id"].(float64)
+	sid := fmt.Sprintf("%.0f", customerID)
+
 	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var customer Customer
-	err := collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
+	err = collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			cp := Customer{
-				FirstName:      user.FirstName,
-				Username:       user.Username,
-				TelegramUserId: tid,
-				Score:          0,
+				FirstName:         user.FirstName,
+				Username:          user.Username,
+				TelegramUserId:    tid,
+				ShopifyCustomerId: sid,
+				Score:             0,
 			}
 			collection.InsertOne(ctx, cp)
 			fmt.Println("Application have new customer", cp)
@@ -294,7 +423,7 @@ func RedeemPointsHandler(c tele.Context) error {
 	}
 	exchangeFoodBtn := telebot.InlineButton{
 		Unique: "exchange_food",
-		Text:   fmt.Sprintf("Exchange free drink (%.0f points)", foodPoint),
+		Text:   fmt.Sprintf("Exchange free food (%.0f points)", foodPoint),
 	}
 	replyMarkup := &telebot.ReplyMarkup{
 		InlineKeyboard: [][]telebot.InlineButton{
