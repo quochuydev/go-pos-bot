@@ -50,6 +50,8 @@ var customerCollection string = "customer"
 var historyCollection string = "history"
 var drinkPoint float64 = 2
 var foodPoint float64 = 4
+var drinkPriceRule = "1716197753141"
+var foodPriceRule = "1716313260341"
 
 type ShortCode struct {
 	Code string `json:"code"`
@@ -394,7 +396,6 @@ func RedeemPointsHandler(c tele.Context) error {
 }
 
 func ExchangeDrinkHandler(c telebot.Context) error {
-	priceRule := "1716197753141"
 	code := generateRandomCode()
 
 	updatedMarkup := &telebot.ReplyMarkup{
@@ -414,7 +415,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
-	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, priceRule)
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, drinkPriceRule)
 
 	payload := map[string]interface{}{
 		"discount_code": map[string]interface{}{
@@ -450,7 +451,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 		log.Fatalf("Error reading response body: %v", err)
 	}
 
-	newScore := customer.Score - 2
+	newScore := customer.Score - drinkPoint
 
 	collection.UpdateOne(
 		context.Background(),
@@ -472,7 +473,6 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 }
 
 func ExchangeFoodHandler(c telebot.Context) error {
-	priceRule := "1716313260341"
 	code := generateRandomCode()
 
 	updatedMarkup := &telebot.ReplyMarkup{
@@ -496,7 +496,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
-	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, priceRule)
+	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, foodPriceRule)
 
 	payload := map[string]interface{}{
 		"discount_code": map[string]interface{}{
@@ -532,7 +532,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 		log.Fatalf("Error reading response body: %v", err)
 	}
 
-	newScore := customer.Score - 4
+	newScore := customer.Score - foodPoint
 
 	collection.UpdateOne(
 		context.Background(),
