@@ -252,57 +252,57 @@ func StartHandler(c tele.Context) error {
 	user := c.Sender()
 	tid := fmt.Sprint(user.ID)
 
-	token := os.Getenv("SHOPIFY_TOKEN")
-	storeURL := os.Getenv("SHOPIFY_STORE_URL")
-	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/customers.json", storeURL)
-
-	payload := map[string]interface{}{
-		"customer": map[string]interface{}{
-			"first_name": user.FirstName,
-			"last_name":  tid,
-		},
-	}
-
-	data, err := json.Marshal(payload)
-	if err != nil {
-		log.Fatalf("Error marshalling customer data: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(data))
-	if err != nil {
-		log.Fatalf("Error creating request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Shopify-Access-Token", token)
-
-	httpClient := &http.Client{}
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		log.Fatalf("Error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		log.Fatalf("Failed to create customer: %s", resp.Status)
-	}
-
-	var responseBody map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
-		log.Fatalf("Error reading response body: %v", err)
-	}
-
-	customerID := responseBody["customer"].(map[string]interface{})["id"].(float64)
-	sid := fmt.Sprintf("%.0f", customerID)
-
 	collection := client.Database(dbName).Collection(customerCollection)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	var customer Customer
-	err = collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
+	err := collection.FindOne(ctx, bson.M{"telegramUserId": tid}).Decode(&customer)
 
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
+			token := os.Getenv("SHOPIFY_TOKEN")
+			storeURL := os.Getenv("SHOPIFY_STORE_URL")
+			apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/customers.json", storeURL)
+
+			payload := map[string]interface{}{
+				"customer": map[string]interface{}{
+					"first_name": user.FirstName,
+					"last_name":  tid,
+				},
+			}
+
+			data, err := json.Marshal(payload)
+			if err != nil {
+				log.Fatalf("Error marshalling customer data: %v", err)
+			}
+
+			req, err := http.NewRequest("POST", apiEndpoint, bytes.NewBuffer(data))
+			if err != nil {
+				log.Fatalf("Error creating request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("X-Shopify-Access-Token", token)
+
+			httpClient := &http.Client{}
+			resp, err := httpClient.Do(req)
+			if err != nil {
+				log.Fatalf("Error sending request: %v", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode != http.StatusCreated {
+				log.Fatalf("Failed to create customer: %s", resp.Status)
+			}
+
+			var responseBody map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&responseBody); err != nil {
+				log.Fatalf("Error reading response body: %v", err)
+			}
+
+			customerID := responseBody["customer"].(map[string]interface{})["id"].(float64)
+			sid := fmt.Sprintf("%.0f", customerID)
+
 			cp := Customer{
 				FirstName:         user.FirstName,
 				Username:          user.Username,
