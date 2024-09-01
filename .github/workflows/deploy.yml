@@ -42,21 +42,39 @@ jobs:
           SHOPIFY_STORE_URL: ${{ vars.SHOPIFY_STORE_URL }}
           SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
         run: |
+          set -e
+          echo "Starting deployment process..."
+
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
 
+          echo "Creating .env file..."
           echo "TELEGRAM_TOKEN=$TELEGRAM_TOKEN" >> .env
           echo "MONGO_URL=$MONGO_URL" >> .env
           echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
           echo "SHOPIFY_TOKEN=$SHOPIFY_TOKEN" >> .env
 
-          ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
+          echo "Stopping existing application..."
+          ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF' || true
             pkill -f "/home/$USER/myapp"
           EOF
 
+          echo "Copying files to server..."
           scp -i private_key.pem -o StrictHostKeyChecking=no myapp $USER@$HOST:/home/$USER/
           scp -i private_key.pem -o StrictHostKeyChecking=no .env $USER@$HOST:/home/$USER/
+
+          echo "Starting application..."
           ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF'
+            set -e
             chmod +x /home/$USER/myapp
             nohup /home/$USER/myapp > /home/$USER/myapp.log 2>&1 &
+            echo "Application started successfully"
+            sleep 5
+            if ! pgrep -f "/home/$USER/myapp" > /dev/null; then
+              echo "Error: Application failed to start"
+              tail -n 50 /home/$USER/myapp.log
+              exit 1
+            fi
           EOF
+
+          echo "Deployment completed successfully"
