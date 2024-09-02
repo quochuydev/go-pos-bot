@@ -378,7 +378,7 @@ func RedeemPointsHandler(c tele.Context) error {
 	score := fmt.Sprint(customer.Score)
 
 	if customer.Score < drinkPoint {
-		m := "You have: " + score + " points.\n\nLet's order to get points"
+		m := "You have: " + score + " points.\nLet's order to get points"
 		fmt.Println("redeem_points", customer.FirstName, score)
 		return c.Send(m)
 	}
@@ -398,7 +398,7 @@ func RedeemPointsHandler(c tele.Context) error {
 		},
 	}
 
-	m := "You have: " + score + " points.\n\nExchange points to get free drink"
+	m := "You have: " + score + " points.\nExchange points to get free drink or food"
 	fmt.Println("redeem_points", customer.FirstName, score)
 	return c.Send(m, replyMarkup)
 }
