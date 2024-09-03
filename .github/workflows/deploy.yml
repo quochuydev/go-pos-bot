@@ -56,6 +56,8 @@ jobs:
           echo "MONGO_URL=$MONGO_URL" >> .env
           echo "SHOPIFY_STORE_URL=$SHOPIFY_STORE_URL" >> .env
           echo "SHOPIFY_TOKEN=$SHOPIFY_TOKEN" >> .env
+          echo "SHOPIFY_FOOD_PRICE_RULE=$SHOPIFY_FOOD_PRICE_RULE" >> .env
+          echo "SHOPIFY_DRINK_PRICE_RULE=$SHOPIFY_DRINK_PRICE_RULE" >> .env
 
           echo "Stopping existing application..."
           ssh -i private_key.pem -o StrictHostKeyChecking=no $USER@$HOST << 'EOF' || true
