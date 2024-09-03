@@ -41,6 +41,8 @@ jobs:
           MONGO_URL: ${{ secrets.MONGO_URL }}
           SHOPIFY_STORE_URL: ${{ vars.SHOPIFY_STORE_URL }}
           SHOPIFY_TOKEN: ${{ secrets.SHOPIFY_TOKEN }}
+          SHOPIFY_FOOD_PRICE_RULE: ${{ vars.SHOPIFY_FOOD_PRICE_RULE }}
+          SHOPIFY_DRINK_PRICE_RULE: ${{ vars.SHOPIFY_DRINK_PRICE_RULE }}
         run: |
           set -e
           echo "Starting deployment process..."
