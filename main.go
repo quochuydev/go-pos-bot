@@ -47,8 +47,6 @@ var customerCollection string = "customer"
 var historyCollection string = "history"
 var drinkPoint float64 = 2
 var foodPoint float64 = 4
-var drinkPriceRule = "1716197753141"
-var foodPriceRule = "1716313260341"
 
 type ShortCode struct {
 	Code string `json:"code"`
@@ -82,6 +80,16 @@ func main() {
 	mongoUrl := os.Getenv("MONGO_URL")
 	if mongoUrl == "" {
 		log.Fatalf("MONGO_URL is not set in .env file")
+	}
+
+	drinkPriceRule := os.Getenv("SHOPIFY_DRINK_PRICE_RULE")
+	if drinkPriceRule == "" {
+		log.Fatalf("SHOPIFY_DRINK_PRICE_RULE is not set in .env file")
+	}
+
+	foodPriceRule := os.Getenv("SHOPIFY_FOOD_PRICE_RULE")
+	if foodPriceRule == "" {
+		log.Fatalf("SHOPIFY_FOOD_PRICE_RULE is not set in .env file")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -423,6 +431,7 @@ func ExchangeDrinkHandler(c telebot.Context) error {
 
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
+	drinkPriceRule := os.Getenv("SHOPIFY_DRINK_PRICE_RULE")
 	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, drinkPriceRule)
 
 	payload := map[string]interface{}{
@@ -505,6 +514,7 @@ func ExchangeFoodHandler(c telebot.Context) error {
 
 	token := os.Getenv("SHOPIFY_TOKEN")
 	storeURL := os.Getenv("SHOPIFY_STORE_URL")
+	foodPriceRule := os.Getenv("SHOPIFY_FOOD_PRICE_RULE")
 	apiEndpoint := fmt.Sprintf("%s/admin/api/2023-07/price_rules/%s/discount_codes.json", storeURL, foodPriceRule)
 
 	payload := map[string]interface{}{
